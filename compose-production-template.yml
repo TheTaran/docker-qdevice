@@ -1,0 +1,20 @@
+services:
+  qnetd:
+    image: ${QDEVICE_IMAGE:-ghcr.io/thetaran/docker-qdevice:latest}
+    container_name: qnetd
+    restart: unless-stopped
+    ports:
+      - "${QNETD_PORT:-5403}:5403/tcp"
+    volumes:
+      - qnetd-data:/etc/corosync/qnetd
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /run:size=8m,mode=0755,uid=903,gid=903
+      - /tmp:size=8m,mode=1777
+
+volumes:
+  qnetd-data:

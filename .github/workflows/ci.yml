@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check entrypoint and source-build policy
+        run: sh tests/test-entrypoint.sh
+
+      - name: Validate Compose templates
+        run: |
+          docker compose -f compose-template.yml config --quiet
+          docker compose -f compose-production-template.yml config --quiet
+
+      - name: Build source image
+        run: docker build --tag docker-qdevice-ci:local .
+
+      - name: Verify source metadata and runtime dependencies
+        run: |
+          docker run --rm --entrypoint sh docker-qdevice-ci:local -c '
+            set -eu
+            test -s /usr/share/doc/corosync-qdevice/SOURCE_COMMIT
+            corosync-qnetd -v
+            ! test -e /var/lib/dpkg/info/corosync-qnetd.list
+            ! ldd /usr/bin/corosync-qnetd | grep -q "not found"
+          '
+
+      - name: Verify hardened container health
+        shell: bash
+        run: |
+          set -euo pipefail
+          container="qdevice-ci-${GITHUB_RUN_ID}"
+          trap 'docker rm --force --volumes "${container}" >/dev/null 2>&1 || true' EXIT
+          docker run --detach --name "${container}" \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges:true \
+            --read-only \
+            --tmpfs /run:uid=903,gid=903,mode=0755 \
+            --tmpfs /tmp:mode=1777 \
+            docker-qdevice-ci:local
+          for attempt in $(seq 1 30); do
+            status="$(docker inspect --format '{{.State.Health.Status}}' "${container}")"
+            if [[ "${status}" == "healthy" ]]; then
+              exit 0
+            fi
+            if [[ "${status}" == "unhealthy" ]]; then
+              docker logs "${container}"
+              exit 1
+            fi
+            sleep 2
+          done
+          docker logs "${container}"
+          echo "QNetd did not become healthy after ${attempt} attempts" >&2
+          exit 1

@@ -1,0 +1,57 @@
+name: Check QDevice version
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compare pinned and current upstream release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(sed -nE 's/^ARG QDEVICE_REF=([^[:space:]]+).*/\1/p' Dockerfile | head -1)"
+          latest="$(gh api repos/corosync/corosync-qdevice/releases/latest --jq '.tag_name')"
+          if [[ -z "${current}" || -z "${latest}" || "${latest}" == "null" ]]; then
+            echo "Unable to determine pinned or latest QDevice version" >&2
+            exit 1
+          fi
+
+          title="Corosync QDevice update available"
+          existing="$(gh issue list --repo "${REPOSITORY}" --state open --search "in:title \"${title}\"" --json number --jq '.[0].number')"
+          if [[ "${current}" == "${latest}" ]]; then
+            echo "QDevice ${current} is current."
+            if [[ -n "${existing}" ]]; then
+              gh issue close "${existing}" --repo "${REPOSITORY}" --comment "The pinned QDevice version ${current} is current."
+            fi
+            exit 0
+          fi
+
+          # shellcheck disable=SC2016
+          body="$(printf '%s\n' \
+            'A newer Corosync QDevice release is available.' \
+            '' \
+            '| Component | Pinned | Latest |' \
+            '| --- | --- | --- |' \
+            "| Corosync QDevice | \`${current}\` | \`${latest}\` |" \
+            '' \
+            'Review the upstream release, update all synchronized `QDEVICE_REF` defaults, rebuild the source image, run the hardened health test, and publish through the normal release process.')"
+
+          if [[ -n "${existing}" ]]; then
+            gh issue edit "${existing}" --repo "${REPOSITORY}" --title "${title}" --body "${body}"
+          else
+            gh issue create --repo "${REPOSITORY}" --title "${title}" --body "${body}"
+          fi

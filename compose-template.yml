@@ -1,0 +1,26 @@
+services:
+  qnetd:
+    build:
+      context: .
+      args:
+        QDEVICE_REF: ${QDEVICE_REF:-v3.0.4}
+        QNETD_UID: ${QNETD_UID:-903}
+        QNETD_GID: ${QNETD_GID:-903}
+    image: docker-qdevice:development
+    container_name: qnetd
+    restart: unless-stopped
+    ports:
+      - "${QNETD_PORT:-5403}:5403/tcp"
+    volumes:
+      - qnetd-data:/etc/corosync/qnetd
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /run:size=8m,mode=0755,uid=${QNETD_UID:-903},gid=${QNETD_GID:-903}
+      - /tmp:size=8m,mode=1777
+
+volumes:
+  qnetd-data:

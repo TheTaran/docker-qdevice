@@ -1,0 +1,141 @@
+name: Build Docker image
+
+on:
+  push:
+    tags:
+      - "v*.*"
+      - "*.*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to publish, for example v1.0.0
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/thetaran/docker-qdevice
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      is_release: ${{ steps.release-tag.outputs.is_release }}
+      tag: ${{ steps.release-tag.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test
+        run: |
+          sh tests/test-entrypoint.sh
+          docker compose -f compose-template.yml config --quiet
+          docker compose -f compose-production-template.yml config --quiet
+
+      - name: Classify tag
+        id: release-tag
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.release_tag }}"
+          fi
+          {
+            echo "tag=${tag}"
+            if [[ "${tag}" =~ ^v[0-9]+\.[0-9]+$ ]]; then
+              echo "is_release=true"
+              echo "release_kind=master"
+              echo "version=${tag#v}"
+            elif [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              version="${tag#v}"
+              echo "is_release=true"
+              echo "release_kind=minor"
+              echo "version=${version}"
+              echo "minor_version=${version%.*}"
+            else
+              echo "is_release=false"
+            fi
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        if: steps.release-tag.outputs.is_release == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        if: steps.release-tag.outputs.is_release == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare image tags
+        id: docker-tags
+        if: steps.release-tag.outputs.is_release == 'true'
+        shell: bash
+        run: |
+          {
+            echo "tags<<EOF"
+            if [[ "${{ steps.release-tag.outputs.release_kind }}" == "master" ]]; then
+              echo "${IMAGE_NAME}:latest"
+              echo "${IMAGE_NAME}:${{ steps.release-tag.outputs.version }}"
+            else
+              echo "${IMAGE_NAME}:${{ steps.release-tag.outputs.version }}"
+              echo "${IMAGE_NAME}:${{ steps.release-tag.outputs.minor_version }}"
+            fi
+            echo "${IMAGE_NAME}:sha-${GITHUB_SHA::7}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build pull request image
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: docker-qdevice-pr:local
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push release image
+        if: steps.release-tag.outputs.is_release == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.docker-tags.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    needs: build
+    if: needs.build.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="${{ needs.build.outputs.tag }}"
+          notes_file=".github/release-notes/${tag}.md"
+          if [[ ! -f "${notes_file}" ]]; then
+            echo "Missing release notes: ${notes_file}" >&2
+            exit 1
+          fi
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "GitHub release ${tag} already exists"
+            exit 0
+          fi
+          gh release create "${tag}" --verify-tag --title "${tag}" --notes-file "${notes_file}"

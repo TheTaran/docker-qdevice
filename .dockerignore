@@ -1,0 +1,12 @@
+.git
+.github
+.agents
+.env
+.gitignore
+compose.yaml
+compose-template.yml
+compose-production-template.yml
+Makefile
+README.md
+tests
+AGENTS.md

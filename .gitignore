@@ -1,0 +1,6 @@
+*.log
+.env
+qnetd-data/
+compose.yaml
+AGENTS.md
+.agents/
