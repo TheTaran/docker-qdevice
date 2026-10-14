@@ -1,0 +1,15 @@
+Port 2222
+ListenAddress 0.0.0.0
+HostKey /run/corosync-qnetd/ssh_host_ed25519_key
+PidFile /run/corosync-qnetd/sshd.pid
+PasswordAuthentication yes
+KbdInteractiveAuthentication no
+PermitRootLogin yes
+PermitEmptyPasswords no
+UsePAM no
+AllowUsers root
+AllowTcpForwarding no
+GatewayPorts no
+PermitTunnel no
+X11Forwarding no
+Subsystem sftp internal-sftp

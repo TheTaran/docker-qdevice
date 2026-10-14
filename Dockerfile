@@ -45,7 +45,7 @@ LABEL org.opencontainers.image.title="Corosync QNetd" \
 RUN set -eux; \
     apt-get update; \
     apt-get install --no-install-recommends -y \
-        adduser ca-certificates libnspr4 libnss3 libnss3-tools procps tini; \
+        adduser ca-certificates libnspr4 libnss3 libnss3-tools openssh-server procps tini util-linux; \
     rm -rf /var/lib/apt/lists/*; \
     addgroup --system --gid "${QNETD_GID}" coroqnetd; \
     adduser --system --uid "${QNETD_UID}" --gid "${QNETD_GID}" \
@@ -55,10 +55,10 @@ RUN set -eux; \
 COPY --from=builder /output/usr/ /usr/
 
 COPY --chmod=0755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY sshd_config.qnetd /etc/ssh/sshd_config.qnetd
 
-USER coroqnetd:coroqnetd
 VOLUME ["/etc/corosync/qnetd"]
-EXPOSE 5403/tcp
+EXPOSE 5403/tcp 2222/tcp
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD ["corosync-qnetd-tool", "-s"]

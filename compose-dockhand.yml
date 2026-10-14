@@ -1,0 +1,30 @@
+services:
+  qnetd:
+    image: ${QNETD_IMAGE:-ghcr.io/thetaran/docker-qdevice:0.1.0}
+    container_name: qnetd
+    restart: unless-stopped
+    ports:
+      - "${QNETD_PORT:-5403}:5403/tcp"
+      - "${QNETD_SSH_BIND_ADDRESS:-127.0.0.1}:${QNETD_SSH_PORT:-2222}:2222/tcp"
+    volumes:
+      - type: bind
+        source: ${QNETD_DATA_DIR:?Set the absolute QNetd data directory on the host}
+        target: /etc/corosync/qnetd
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    security_opt:
+      - no-new-privileges:true
+    read_only: ${QNETD_READ_ONLY:-true}
+    tmpfs:
+      - /run:size=8m,mode=0755,uid=903,gid=903
+      - /tmp:size=8m,mode=1777
+    environment:
+      QNETD_SSH_ENABLED: ${QNETD_SSH_ENABLED:-false}
+      QNETD_SSH_PASSWORD: ${QNETD_SSH_PASSWORD:-}
+      QNETD_SSH_HOST: ${QNETD_SSH_BIND_ADDRESS:-127.0.0.1}
+      QNETD_SSH_PORT: ${QNETD_SSH_PORT:-2222}

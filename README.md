@@ -62,7 +62,23 @@ docker compose up -d
 
 Do not use `latest` when a deployment must remain pinned to a known release.
 
+For a Dockhand deployment that uses a visible host directory instead of a
+Docker-managed volume, select `compose-dockhand.yml` and set:
+
+```sh
+QNETD_IMAGE=ghcr.io/thetaran/docker-qdevice:0.1.0
+QNETD_PORT=5403
+QNETD_DATA_DIR=/volume2/docker/docker-qdevice
+```
+
+The host directory must be owned by UID/GID `903:903` and must be retained
+across upgrades.
+
 ## Certificate Enrollment
+
+The production image supports a disabled-by-default SSH setup mode for Proxmox
+VE automation. Use the manual workflow below or enable the temporary SSH mode
+described in [Proxmox VE setup via SSH](#proxmox-ve-setup-via-ssh).
 
 On first start, the container creates its NSS database and QNetd CA under `/etc/corosync/qnetd/nssdb` in the persistent volume.
 
@@ -102,6 +118,65 @@ Then perform the manual enrollment:
 
 6. Distribute the generated PKCS#12 client certificate to the remaining cluster nodes according to the upstream Corosync QDevice documentation.
 
+## Proxmox VE Setup via SSH
+
+`pvecm qdevice setup` expects a conventional QNetd server with root SSH access
+and the `corosync-qnetd-certutil` command available on the remote host. Enable
+the QNetd container's temporary SSH setup mode only while running this command.
+Proxmox then prompts interactively for a temporary root password. Port
+forwarding and X11 forwarding remain disabled.
+
+Only enable this setup mode while performing the setup. Restrict its published port
+to the Proxmox management network in the NAS firewall.
+
+On the NAS, set the following Dockhand stack variables (or an equivalent local
+environment file):
+
+```sh
+QNETD_IMAGE=ghcr.io/thetaran/docker-qdevice:0.1.0
+QNETD_DATA_DIR=/volume2/docker/docker-qdevice
+QNETD_SSH_BIND_ADDRESS=NAS_IP
+QNETD_SSH_PORT=2222
+QNETD_SSH_ENABLED=true
+QNETD_READ_ONLY=false
+QNETD_SSH_PASSWORD='A_LONG_TEMPORARY_PASSWORD'
+```
+
+Redeploy `compose-dockhand.yml`. The QNetd container then listens for setup
+SSH internally on port `2222`; `QNETD_SSH_PORT` controls the NAS port exposed
+to Proxmox. Its startup log displays the required `/root/.ssh/config` block
+and the `pvecm qdevice setup` command without printing the password.
+
+On the Proxmox node that will run the setup, configure the custom port before
+calling `pvecm`. `pvecm qdevice setup` has no SSH-port argument, but uses the
+standard OpenSSH client configuration:
+
+```sshconfig
+Host NAS_IP
+    User root
+    Port 2222
+    StrictHostKeyChecking accept-new
+```
+
+Replace `NAS_IP` with the literal NAS IP address and save this in
+`/root/.ssh/config` with mode `0600`. Verify access, then let Proxmox perform
+the normal setup; it will ask for the temporary root password:
+
+```sh
+pvecm qdevice setup NAS_IP
+```
+
+After `pvecm status` shows the `Qdevice` flag, disable the SSH setup mode and
+redeploy the main QNetd stack:
+
+```sh
+QNETD_SSH_ENABLED=false
+QNETD_READ_ONLY=true
+```
+
+Remove `QNETD_SSH_PASSWORD` as well. The QNetd certificate data remains
+untouched.
+
 ## Configuration
 
 | Variable | Default | Description |
@@ -111,6 +186,10 @@ Then perform the manual enrollment:
 | `QNETD_GID` | `903` | Runtime group ID used at image build time |
 | `QNETD_PORT` | `5403` | Published host TCP port |
 | `QDEVICE_IMAGE` | `ghcr.io/thetaran/docker-qdevice:latest` | Image used by the production template |
+| `QNETD_SSH_ENABLED` | `false` | Temporarily enables SSH for `pvecm qdevice setup` |
+| `QNETD_SSH_BIND_ADDRESS` | `127.0.0.1` | NAS address used for the temporary SSH port |
+| `QNETD_SSH_PORT` | `2222` | Published temporary SSH port |
+| `QNETD_READ_ONLY` | `true` | Must be `false` while setting the temporary SSH password |
 
 Container arguments are passed directly to `corosync-qnetd`; foreground mode (`-f`) is always enabled:
 

@@ -6,7 +6,11 @@ script=docker-entrypoint.sh
 test -x "${script}"
 grep -q '^set -eu$' "${script}"
 grep -q 'corosync-qnetd-certutil -i' "${script}"
-grep -q 'exec corosync-qnetd -f' "${script}"
+grep -q 'exec setpriv --reuid=903 --regid=903 --clear-groups corosync-qnetd -f' "${script}"
+grep -q 'QNETD_SSH_ENABLED' "${script}"
+grep -q 'QNETD_SSH_PASSWORD' "${script}"
+grep -q 'QNetd Proxmox SSH setup mode is ENABLED' "${script}"
+grep -q 'setpriv --reuid=903' "${script}"
 grep -q 'https://github.com/corosync/corosync-qdevice.git' Dockerfile
 grep -q 'COPY --from=builder' Dockerfile
 if grep -Eq 'apt-get install.*corosync-qnetd|^[[:space:]]+corosync-qnetd[[:space:]\\]*$' Dockerfile; then
