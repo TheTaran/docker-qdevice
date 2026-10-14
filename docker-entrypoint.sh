@@ -24,6 +24,7 @@ if [ ! -d "${runtime_dir}" ]; then
     chown 903:903 "${runtime_dir}"
 fi
 
+# shellcheck disable=SC2016 # The quoted script is evaluated by the unprivileged shell.
 setpriv --reuid=903 --regid=903 --clear-groups /bin/sh -ceu '
     if [ ! -f "$1/cert9.db" ] && [ ! -f "$1/cert8.db" ]; then
         if [ -e "$1" ] && [ -n "$(find "$1" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
