@@ -35,7 +35,10 @@ jobs:
           docker run --rm --entrypoint sh docker-qdevice-ci:local -c '
             set -eu
             test -s /usr/share/doc/corosync-qdevice/SOURCE_COMMIT
-            corosync-qnetd -v
+            version_status=0
+            version_output="$(corosync-qnetd -v 2>&1)" || version_status=$?
+            test "${version_status}" -eq 1
+            printf "%s\n" "${version_output}" | grep -q "Corosync Qdevice Network Daemon, version"
             ! test -e /var/lib/dpkg/info/corosync-qnetd.list
             ! ldd /usr/bin/corosync-qnetd | grep -q "not found"
           '
