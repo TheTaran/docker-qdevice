@@ -3,8 +3,7 @@ name: Build Docker image
 on:
   push:
     tags:
-      - "v*.*"
-      - "*.*"
+      - "v*.*.*"
   pull_request:
     branches:
       - main
@@ -48,14 +47,9 @@ jobs:
           fi
           {
             echo "tag=${tag}"
-            if [[ "${tag}" =~ ^v[0-9]+\.[0-9]+$ ]]; then
-              echo "is_release=true"
-              echo "release_kind=master"
-              echo "version=${tag#v}"
-            elif [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            if [[ "${tag}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
               version="${tag#v}"
               echo "is_release=true"
-              echo "release_kind=minor"
               echo "version=${version}"
               echo "minor_version=${version%.*}"
             else
@@ -82,13 +76,8 @@ jobs:
         run: |
           {
             echo "tags<<EOF"
-            if [[ "${{ steps.release-tag.outputs.release_kind }}" == "master" ]]; then
-              echo "${IMAGE_NAME}:latest"
-              echo "${IMAGE_NAME}:${{ steps.release-tag.outputs.version }}"
-            else
-              echo "${IMAGE_NAME}:${{ steps.release-tag.outputs.version }}"
-              echo "${IMAGE_NAME}:${{ steps.release-tag.outputs.minor_version }}"
-            fi
+            echo "${IMAGE_NAME}:${{ steps.release-tag.outputs.version }}"
+            echo "${IMAGE_NAME}:${{ steps.release-tag.outputs.minor_version }}"
             echo "${IMAGE_NAME}:sha-${GITHUB_SHA::7}"
             echo "EOF"
           } >> "${GITHUB_OUTPUT}"
