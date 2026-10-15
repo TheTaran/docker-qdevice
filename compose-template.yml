@@ -15,11 +15,6 @@ services:
       - qnetd-data:/etc/corosync/qnetd
     cap_drop:
       - ALL
-    cap_add:
-      - CHOWN
-      - DAC_OVERRIDE
-      - SETGID
-      - SETUID
     security_opt:
       - no-new-privileges:true
     read_only: true

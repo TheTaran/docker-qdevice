@@ -57,6 +57,8 @@ COPY --from=builder /output/usr/ /usr/
 COPY --chmod=0755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY sshd_config.qnetd /etc/ssh/sshd_config.qnetd
 
+USER coroqnetd:coroqnetd
+
 VOLUME ["/etc/corosync/qnetd"]
 EXPOSE 5403/tcp 2222/tcp
 

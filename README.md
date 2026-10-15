@@ -18,7 +18,9 @@ This project provides:
 - tag-driven GitHub Container Registry releases
 - automated upstream-version monitoring
 
-The image intentionally contains no SSH server. Proxmox VE installations must use the manual QDevice certificate workflow described below instead of `pvecm qdevice setup`.
+QNetd normally runs directly as the unprivileged `coroqnetd` user (UID/GID
+`903`) with all Linux capabilities dropped. An SSH server is present only for
+the disabled-by-default, temporary Proxmox setup mode described below.
 
 ## Project Versions
 
@@ -66,7 +68,7 @@ For a Dockhand deployment that uses a visible host directory instead of a
 Docker-managed volume, select `compose-dockhand.yml` and set:
 
 ```sh
-QNETD_IMAGE=ghcr.io/thetaran/docker-qdevice:0.1.0
+QNETD_IMAGE=ghcr.io/thetaran/docker-qdevice:0.2.0
 QNETD_PORT=5403
 QNETD_DATA_DIR=/volume2/docker/docker-qdevice
 ```
@@ -133,16 +135,28 @@ On the NAS, set the following Dockhand stack variables (or an equivalent local
 environment file):
 
 ```sh
-QNETD_IMAGE=ghcr.io/thetaran/docker-qdevice:0.1.0
+QNETD_IMAGE=ghcr.io/thetaran/docker-qdevice:0.2.0
 QNETD_DATA_DIR=/volume2/docker/docker-qdevice
 QNETD_SSH_BIND_ADDRESS=NAS_IP
 QNETD_SSH_PORT=2222
-QNETD_SSH_ENABLED=true
 QNETD_READ_ONLY=false
 QNETD_SSH_PASSWORD='A_LONG_TEMPORARY_PASSWORD'
 ```
 
-Redeploy `compose-dockhand.yml`. The QNetd container then listens for setup
+For this temporary deployment only, add the following two settings to the
+`qnetd` service in `compose-dockhand.yml`:
+
+```yaml
+    user: "0:0"
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+```
+
+Then set `QNETD_SSH_ENABLED=true` and redeploy `compose-dockhand.yml`. The
+QNetd container then listens for setup
 SSH internally on port `2222`; `QNETD_SSH_PORT` controls the NAS port exposed
 to Proxmox. Its startup log displays the required `/root/.ssh/config` block
 and the `pvecm qdevice setup` command without printing the password.
@@ -175,7 +189,8 @@ QNETD_READ_ONLY=true
 ```
 
 Remove `QNETD_SSH_PASSWORD` as well. The QNetd certificate data remains
-untouched.
+untouched. Also remove the temporary `user` and `cap_add` settings before
+redeploying: regular QNetd operation does not need them.
 
 ## Configuration
 

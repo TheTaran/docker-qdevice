@@ -13,19 +13,13 @@ if [ "${1:-}" != "" ] && [ "${1#-}" = "$1" ]; then
     exec "$@"
 fi
 
-if ! setpriv --reuid=903 --regid=903 --clear-groups test -w "${data_dir}"; then
+if [ ! -w "${data_dir}" ]; then
     echo "error: ${data_dir} is not writable by uid 903" >&2
     echo "Set the volume owner to uid/gid 903 or build with QNETD_UID/QNETD_GID." >&2
     exit 1
 fi
 
-if [ ! -d "${runtime_dir}" ]; then
-    install -d -m 0750 "${runtime_dir}"
-    chown 903:903 "${runtime_dir}"
-fi
-
-# shellcheck disable=SC2016 # The quoted script is evaluated by the unprivileged shell.
-setpriv --reuid=903 --regid=903 --clear-groups /bin/sh -ceu '
+initialize_certificate_database() {
     if [ ! -f "$1/cert9.db" ] && [ ! -f "$1/cert8.db" ]; then
         if [ -e "$1" ] && [ -n "$(find "$1" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
             echo "error: $1 is non-empty but has no recognizable certificate database" >&2
@@ -34,14 +28,37 @@ setpriv --reuid=903 --regid=903 --clear-groups /bin/sh -ceu '
         echo "Initializing QNetd certificate database..."
         corosync-qnetd-certutil -i
     fi
-' sh "${db_dir}"
+}
 
 if [ "${QNETD_SSH_ENABLED:-false}" = "true" ]; then
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "error: SSH setup mode requires the container to run as root" >&2
+        echo "Set user: \"0:0\" and add CHOWN, DAC_OVERRIDE, SETGID, and SETUID capabilities." >&2
+        exit 1
+    fi
+
     : "${QNETD_SSH_PASSWORD:?Set QNETD_SSH_PASSWORD for the temporary Proxmox root login}"
     if [ ! -w /etc/shadow ]; then
         echo "error: SSH setup mode requires QNETD_READ_ONLY=false" >&2
         exit 1
     fi
+
+    if [ ! -d "${runtime_dir}" ]; then
+        install -d -m 0750 "${runtime_dir}"
+        chown 903:903 "${runtime_dir}"
+    fi
+
+    # shellcheck disable=SC2016 # The quoted script is evaluated by the unprivileged shell.
+    setpriv --reuid=903 --regid=903 --clear-groups /bin/sh -ceu '
+        if [ ! -f "$1/cert9.db" ] && [ ! -f "$1/cert8.db" ]; then
+            if [ -e "$1" ] && [ -n "$(find "$1" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+                echo "error: $1 is non-empty but has no recognizable certificate database" >&2
+                exit 1
+            fi
+            echo "Initializing QNetd certificate database..."
+            corosync-qnetd-certutil -i
+        fi
+    ' sh "${db_dir}"
 
     printf 'root:%s\n' "${QNETD_SSH_PASSWORD}" | chpasswd
     unset QNETD_SSH_PASSWORD
@@ -71,6 +88,9 @@ QNETD_SSH_PASSWORD. The pvecm command always uses the root account.
 After pvecm status shows the Qdevice flag, set QNETD_SSH_ENABLED=false,
 set QNETD_READ_ONLY=true, remove QNETD_SSH_PASSWORD, and redeploy this container.
 EOF
+
+    exec setpriv --reuid=903 --regid=903 --clear-groups corosync-qnetd -f "$@"
 fi
 
-exec setpriv --reuid=903 --regid=903 --clear-groups corosync-qnetd -f "$@"
+initialize_certificate_database "${db_dir}"
+exec corosync-qnetd -f "$@"

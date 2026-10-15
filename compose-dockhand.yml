@@ -1,6 +1,6 @@
 services:
   qnetd:
-    image: ${QNETD_IMAGE:-ghcr.io/thetaran/docker-qdevice:0.1.0}
+    image: ${QNETD_IMAGE:-ghcr.io/thetaran/docker-qdevice:0.2.0}
     container_name: qnetd
     restart: unless-stopped
     ports:
@@ -12,11 +12,6 @@ services:
         target: /etc/corosync/qnetd
     cap_drop:
       - ALL
-    cap_add:
-      - CHOWN
-      - DAC_OVERRIDE
-      - SETGID
-      - SETUID
     security_opt:
       - no-new-privileges:true
     read_only: ${QNETD_READ_ONLY:-true}
