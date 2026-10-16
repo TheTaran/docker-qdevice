@@ -174,15 +174,15 @@ Proxmox then prompts interactively for a temporary root password. Port
 forwarding and X11 forwarding remain disabled.
 
 Only enable this setup mode while performing the setup. Restrict its published port
-to the Proxmox management network in the NAS firewall.
+to the Proxmox management network in the Docker device's firewall.
 
-On the NAS, set the following Dockhand stack variables (or an equivalent local
+On the Docker device, set the following Dockhand stack variables (or an equivalent local
 environment file):
 
 ```sh
 QNETD_IMAGE=ghcr.io/thetaran/docker-qdevice:1.0.0
 QNETD_DATA_DIR=/volume2/docker/docker-qdevice
-QNETD_SSH_BIND_ADDRESS=NAS_IP
+QNETD_SSH_BIND_ADDRESS=DeviceIP
 QNETD_SSH_PORT=2222
 QNETD_READ_ONLY=false
 QNETD_SSH_PASSWORD='A_LONG_TEMPORARY_PASSWORD'
@@ -203,7 +203,7 @@ For this temporary deployment only, add the following two settings to the
 
 Then set `QNETD_SSH_ENABLED=true` and redeploy `compose-dockhand.yml`. The
 QNetd container then listens for setup
-SSH internally on port `2222`; `QNETD_SSH_PORT` controls the NAS port exposed
+SSH internally on port `2222`; `QNETD_SSH_PORT` controls the Docker-device port exposed
 to Proxmox. Its startup log displays the required `/root/.ssh/config` block
 and the `pvecm qdevice setup` command without printing the password.
 
@@ -212,18 +212,18 @@ calling `pvecm`. `pvecm qdevice setup` has no SSH-port argument, but uses the
 standard OpenSSH client configuration:
 
 ```sshconfig
-Host NAS_IP
+Host DeviceIP
     User root
     Port 2222
     StrictHostKeyChecking accept-new
 ```
 
-Replace `NAS_IP` with the literal NAS IP address and save this in
+Replace `DeviceIP` with the literal IP address of the Docker device and save this in
 `/root/.ssh/config` with mode `0600`. Verify access, then let Proxmox perform
 the normal setup; it will ask for the temporary root password:
 
 ```sh
-pvecm qdevice setup NAS_IP
+pvecm qdevice setup DeviceIP
 ```
 
 After `pvecm status` shows the `Qdevice` flag, disable the SSH setup mode and
@@ -248,7 +248,7 @@ redeploying: regular QNetd operation does not need them.
 | `QNETD_PORT` | `5403` | Published host TCP port |
 | `QDEVICE_IMAGE` | `ghcr.io/thetaran/docker-qdevice:1.0.0` | Image used by the production template |
 | `QNETD_SSH_ENABLED` | `false` | Temporarily enables SSH for `pvecm qdevice setup` |
-| `QNETD_SSH_BIND_ADDRESS` | `127.0.0.1` | NAS address used for the temporary SSH port |
+| `QNETD_SSH_BIND_ADDRESS` | `127.0.0.1` | Docker-device address used for the temporary SSH port |
 | `QNETD_SSH_PORT` | `2222` | Published temporary SSH port |
 | `QNETD_READ_ONLY` | `true` | Must be `false` while setting the temporary SSH password |
 
