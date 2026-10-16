@@ -1,6 +1,6 @@
 services:
   qnetd:
-    image: ${QDEVICE_IMAGE:-ghcr.io/thetaran/docker-qdevice:latest}
+    image: ${QDEVICE_IMAGE:-ghcr.io/thetaran/docker-qdevice:1.0.0}
     container_name: qnetd
     restart: unless-stopped
     ports:

@@ -68,13 +68,58 @@ For a Dockhand deployment that uses a visible host directory instead of a
 Docker-managed volume, select `compose-dockhand.yml` and set:
 
 ```sh
-QNETD_IMAGE=ghcr.io/thetaran/docker-qdevice:0.2.0
+QNETD_IMAGE=ghcr.io/thetaran/docker-qdevice:1.0.0
 QNETD_PORT=5403
 QNETD_DATA_DIR=/volume2/docker/docker-qdevice
 ```
 
 The host directory must be owned by UID/GID `903:903` and must be retained
 across upgrades.
+
+### Dockhand stack: normal operation
+
+Use the following hardened stack after QDevice enrollment. The address,
+directory, and password values are pseudonymized. Lines beginning with `#` are
+needed only during the temporary Proxmox SSH setup and must remain commented
+during normal operation.
+
+```yaml
+services:
+  qnetd:
+    image: ghcr.io/thetaran/docker-qdevice:1.0.0
+    container_name: qnetd
+    restart: unless-stopped
+    # user: "0:0"
+    ports:
+      - "5403:5403/tcp"
+      # - "192.0.2.10:2223:2222/tcp"
+    volumes:
+      - /volume2/docker/example-qnetd:/etc/corosync/qnetd
+    cap_drop:
+      - ALL
+    # cap_add:
+    #   - CHOWN
+    #   - DAC_OVERRIDE
+    #   - SETGID
+    #   - SETUID
+    #   - SYS_CHROOT
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /run:size=8m,mode=0755,uid=903,gid=903
+      - /tmp:size=8m,mode=1777
+    # environment:
+    #   QNETD_SSH_ENABLED: "true"
+    #   QNETD_SSH_PASSWORD: "replace-with-a-long-temporary-password"
+    #   QNETD_SSH_HOST: "192.0.2.10"
+    #   QNETD_SSH_PORT: "2223"
+```
+
+For the temporary Proxmox SSH setup, uncomment all marked lines, set
+`read_only: false`, replace the pseudonymized address and password, and
+redeploy. Once `pvecm status` reports `Quorate Qdevice`, restore the normal
+configuration exactly as shown above and redeploy.
 
 ## Certificate Enrollment
 
@@ -135,7 +180,7 @@ On the NAS, set the following Dockhand stack variables (or an equivalent local
 environment file):
 
 ```sh
-QNETD_IMAGE=ghcr.io/thetaran/docker-qdevice:0.2.0
+QNETD_IMAGE=ghcr.io/thetaran/docker-qdevice:1.0.0
 QNETD_DATA_DIR=/volume2/docker/docker-qdevice
 QNETD_SSH_BIND_ADDRESS=NAS_IP
 QNETD_SSH_PORT=2222
@@ -153,6 +198,7 @@ For this temporary deployment only, add the following two settings to the
       - DAC_OVERRIDE
       - SETGID
       - SETUID
+      - SYS_CHROOT
 ```
 
 Then set `QNETD_SSH_ENABLED=true` and redeploy `compose-dockhand.yml`. The
@@ -200,7 +246,7 @@ redeploying: regular QNetd operation does not need them.
 | `QNETD_UID` | `903` | Runtime user ID used at image build time |
 | `QNETD_GID` | `903` | Runtime group ID used at image build time |
 | `QNETD_PORT` | `5403` | Published host TCP port |
-| `QDEVICE_IMAGE` | `ghcr.io/thetaran/docker-qdevice:latest` | Image used by the production template |
+| `QDEVICE_IMAGE` | `ghcr.io/thetaran/docker-qdevice:1.0.0` | Image used by the production template |
 | `QNETD_SSH_ENABLED` | `false` | Temporarily enables SSH for `pvecm qdevice setup` |
 | `QNETD_SSH_BIND_ADDRESS` | `127.0.0.1` | NAS address used for the temporary SSH port |
 | `QNETD_SSH_PORT` | `2222` | Published temporary SSH port |
@@ -217,7 +263,7 @@ services:
 Use the image itself to display the options supported by the compiled release:
 
 ```sh
-docker run --rm ghcr.io/thetaran/docker-qdevice:latest \
+docker run --rm ghcr.io/thetaran/docker-qdevice:1.0.0 \
   corosync-qnetd -h
 ```
 
@@ -259,10 +305,17 @@ The release workflow publishes:
 
 - `ghcr.io/thetaran/docker-qdevice:<full-version>`
 - `ghcr.io/thetaran/docker-qdevice:<major.minor>` for three-part versions
-- `ghcr.io/thetaran/docker-qdevice:latest` for designated two-part master releases
 - `ghcr.io/thetaran/docker-qdevice:sha-<commit>`
 
 Releases, tags, and images are created only after explicit approval.
+
+## Upstream update check
+
+The scheduled GitHub Actions workflow **Check QDevice version** runs every
+Monday at 06:17 UTC. It compares `QDEVICE_REF` with the latest upstream
+Corosync QDevice release and creates or updates a GitHub Issue when an update
+is available. It never changes the image, source pin, or release version
+automatically.
 
 ## Upstream and License
 
